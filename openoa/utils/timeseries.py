@@ -241,6 +241,38 @@ def percent_nan(col: pd.Series | str, data: pd.DataFrame = None):
     return 1 if (denominator := float(col.size)) == 0 else np.isnan(col.values).sum() / denominator
 
 
+@series_method(data_cols=["col"])
+def percent_is(col: pd.Series | str, values: list, data: pd.DataFrame = None):
+    """
+    Percentage of rows where `col` equals any element in `values` (must be a list).
+    Returns 1 if the series is empty.
+    """
+
+    return 1 if (den := float((s := col.dropna()).size)) == 0 else s.isin(values).sum() / den
+
+
+
+@series_method(data_cols=["col"])
+def percent_isnot(col: pd.Series | str, values: list, data: pd.DataFrame = None):
+    """
+    Percentage of rows where `col` is NOT any element in `values` (must be a list).
+    Returns 1 if the series is empty.
+    """
+    
+    return 1 if (den := float((s := col.dropna()).size)) == 0 else (~s.isin(values)).sum() / den
+
+
+@series_method(data_cols=["col"])
+def percent_between(col: pd.Series | str, min_val: float, max_val: float, data: pd.DataFrame = None):
+    """
+    Percentage of rows where `col` is between min_val and max_val (inclusive).
+    Returns 1 if the series is empty.
+    """
+    
+    return 1 if (den := float((s := col.dropna()).size)) == 0 else s.between(min_val, max_val, inclusive="both").sum() / den
+
+
+
 @series_method(data_cols=["dt_col"])
 def num_days(dt_col: pd.Series | str, data: pd.DataFrame = None) -> int:
     """

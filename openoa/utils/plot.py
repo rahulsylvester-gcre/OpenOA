@@ -554,7 +554,7 @@ def plot_monthly_reanalysis_windspeed(
 
     for name, df in data.items():
         # Compute the rolling mean and normalize it over a 12 month average
-        ws = df.resample("MS")[windspeed_col].mean().to_frame().rolling(12).mean()
+        ws = df.resample("MS")[windspeed_col].mean().to_frame().rolling(3).mean()
         if normalize:
             ws = ws[windspeed_col] / ws[windspeed_col].mean()
 

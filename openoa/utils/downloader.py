@@ -482,3 +482,136 @@ def get_merra2_monthly(
     df.to_csv(save_pathname / f"{save_filename}.csv", index=True)
 
     return df
+
+
+def get_era5_hourly(
+    lat: float,
+    lon: float,
+    save_pathname: str | Path,
+    save_filename: str,
+    start_date: str = "2000-01-01",   # accepts YYYY-MM-DD or YYYY-MM
+    end_date: str | None = None,      # accepts YYYY-MM-DD or YYYY-MM
+) -> pd.DataFrame:
+    """
+    Download ERA5 *hourly* single-level fields (100m u/v, 2m temp, surface pressure)
+    around (lat, lon). Saves monthly NetCDFs and a concatenated CSV with columns:
+      - 100m_u_component_of_wind
+      - 100m_v_component_of_wind
+      - 2m_temperature
+      - surface_pressure
+    """
+    import datetime as dt
+    from pathlib import Path
+    import cdsapi
+    import pandas as pd
+    import xarray as xr
+
+    logger.info("Please note access to ERA5 data requires registration")
+    logger.info("Please see: https://cds.climate.copernicus.eu/api-how-to")
+
+    # cds client
+    try:
+        c = cdsapi.Client()
+    except Exception as e:
+        logger.error("Failed to make connection to cds")
+        logger.error(e)
+        raise
+
+    # ensure path
+    save_path = Path(save_pathname).resolve()
+    save_path.mkdir(parents=True, exist_ok=True)
+
+    # parse YYYY-MM or YYYY-MM-DD
+    def _parse_ym_or_ymd(s: str) -> dt.datetime:
+        for fmt in ("%Y-%m-%d", "%Y-%m"):
+            try:
+                d = dt.datetime.strptime(s, fmt)
+                return d if fmt == "%Y-%m-%d" else d.replace(day=1)
+            except ValueError:
+                pass
+        raise ValueError(f"Date {s!r} must be 'YYYY-MM-DD' or 'YYYY-MM'.")
+
+    # default end: most recent likely-complete month (~37 days ago)
+    if end_date is None:
+        now = dt.datetime.now() - dt.timedelta(days=37)
+        end_date = f"{now.year}-{now.month:02d}"
+
+    start_dt = _parse_ym_or_ymd(start_date)
+    end_dt   = _parse_ym_or_ymd(end_date)
+    if start_dt > end_dt:
+        logger.error(f"start_date = {start_dt.date()}, end_date = {end_dt.date()}")
+        raise ValueError("The start_date should be less than or equal to the end_date")
+
+    # list months to download
+    months = pd.date_range(start=start_dt.replace(day=1),
+                           end=end_dt.replace(day=1),
+                           freq="MS", inclusive="both")
+
+    # small bbox around point
+    node_spacing = 0.250500001
+
+    cds_dataset = "reanalysis-era5-single-levels"
+    cds_request = {
+        "product_type": "reanalysis",
+        "format": "netcdf",
+        "variable": [
+            "100m_u_component_of_wind",
+            "100m_v_component_of_wind",
+            "2m_temperature",
+            "surface_pressure",
+        ],
+        "year": None,
+        "month": None,
+        "day": [f"{d:02d}" for d in range(1, 32)],          # CDS trims invalid days
+        "time": [f"{h:02d}:00" for h in range(24)],          # hourly
+        "area": [
+            lat + node_spacing,  # North
+            lon - node_spacing,  # West
+            lat - node_spacing,  # South
+            lon + node_spacing,  # East
+        ],
+    }
+
+    # download per month
+    for m in months:
+        outfile = save_path / f"{save_filename}_{m.year}{m.month:02d}.nc"
+        if not outfile.is_file():
+            logger.info(f"Downloading ERA5 hourly: {outfile}")
+            try:
+                req = dict(cds_request)
+                req["year"] = f"{m.year}"
+                req["month"] = f"{m.month:02d}"
+                c.retrieve(cds_dataset, req, str(outfile))
+            except Exception as e:
+                logger.error(f"Failed to download ERA5: {outfile}")
+                logger.error(e)
+
+    # open, select nearest point (handle expver), drop coords
+    ds_nc = xr.open_mfdataset(str(save_path / f"{save_filename}_*.nc"), combine="by_coords")
+    sel_kwargs = dict(latitude=lat, longitude=lon, method="nearest")
+    sel = ds_nc.sel(expver=1, **sel_kwargs) if "expver" in ds_nc.dims else ds_nc.sel(**sel_kwargs)
+    sel = sel.squeeze(drop=True).reset_coords(drop=True)
+
+    # ERA5 short → requested long names
+    rename_map = {
+        "u100": "100m_u_component_of_wind",
+        "v100": "100m_v_component_of_wind",
+        "t2m":  "2m_temperature",
+        "sp":   "surface_pressure",
+    }
+    present = {k: v for k, v in rename_map.items() if k in sel.variables}
+    if not present:
+        raise RuntimeError("Expected ERA5 variables not found in the response.")
+    sel = sel[list(present.keys())].rename(present)
+
+    # to DataFrame, crop exactly
+    df = sel.to_dataframe().dropna()
+    df.index.name = "datetime"
+    df = df.loc[start_dt:end_dt]
+
+    # save CSV
+    out_csv = save_path / f"{save_filename}.csv"
+    df.to_csv(out_csv, index=True)
+    logger.info(f"Saved concatenated CSV → {out_csv}")
+
+    return df
