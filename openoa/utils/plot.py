@@ -290,41 +290,48 @@ def plot_windfarm(
     return plot_map
     
 def plot_windturbine(
-    latitude,
-    longitude,
+    info,
     tile_name="OpenMap",
     plot_width=800,
     plot_height=800,
-    marker_size=14,
+    marker_size=20,
     figure_kwargs={},
     marker_kwargs={},
 ):
-    """Plot a single wind turbine on a map (minimal version of plot_windfarm)."""
-    
-    MAP_TILES = {
-    "OpenMap": WMTSTileSource(
-        url="https://tile.openstreetmap.org/{Z}/{X}/{Y}.png"
-    ),
-    "ESRI": WMTSTileSource(
-        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{Z}/{Y}/{X}.jpg"
-    ),
-    "OpenTopoMap": WMTSTileSource(
-        url="https://tile.opentopomap.org/{Z}/{X}/{Y}.png"
-    ),
-}
+    """Plot a single wind turbine using info DataFrame containing latitude & longitude."""
 
-    # Make a minimal dataframe with a single turbine
+    # Extract coordinates
+    asset_id = info["asset_id"].iloc[0]
+    turbine_type = info["turbine_type"].iloc[0]
+    latitude = float(info["latitude"].iloc[0])
+    longitude = float(info["longitude"].iloc[0])
+
+    MAP_TILES = {
+        "OpenMap": WMTSTileSource(
+            url="https://tile.openstreetmap.org/{Z}/{X}/{Y}.png"
+        ),
+        "ESRI": WMTSTileSource(
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{Z}/{Y}/{X}.jpg"
+        ),
+        "OpenTopoMap": WMTSTileSource(
+            url="https://tile.opentopomap.org/{Z}/{X}/{Y}.png"
+        ),
+    }
+
+    # Minimal dataframe for Bokeh plotting
     asset_df = pd.DataFrame({
-        "asset_id": ["T1"],
-        "type": ["turbine"],
+        "asset_id": [asset_id],
+        "type": [turbine_type],
         "latitude": [latitude],
         "longitude": [longitude],
     })
 
     # Convert lat/lon -> Web Mercator
-    TRANSFORM_4326_TO_3857 = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=False)
+    TRANSFORM_4326_TO_3857 = Transformer.from_crs(
+        "EPSG:4326", "EPSG:3857", always_xy=True
+    )
     asset_df["x"], asset_df["y"] = TRANSFORM_4326_TO_3857.transform(
-        asset_df["latitude"], asset_df["longitude"]
+        asset_df["longitude"], asset_df["latitude"]
     )
     asset_df["coordinates"] = list(zip(asset_df["latitude"], asset_df["longitude"]))
 
@@ -334,11 +341,15 @@ def plot_windturbine(
         "x_axis_label": "Longitude",
         "y_axis_label": "Latitude",
         "match_aspect": True,
-        "tooltips": [("asset_id", "@asset_id"), ("type", "@type"), ("(Lat,Lon)", "@coordinates")],
+        "tooltips": [
+            ("asset_id", "@asset_id"),
+            ("type", "@type"),
+            ("(Lat,Lon)", "@coordinates"),
+        ],
     }
     figure_options.update(figure_kwargs)
 
-    # Default marker options
+    # Marker options
     marker_options = {
         "marker": "circle_y",
         "line_width": 1,
@@ -362,10 +373,24 @@ def plot_windturbine(
 
     plot_map.add_tile(MAP_TILES[tile_name])
 
-    # Plot turbine marker
-    plot_map.scatter(x="x", y="y", source=source, size=marker_size, **marker_options)
+    # Draw marker
+    plot_map.scatter(
+        x="x", y="y", source=source, size=marker_size, **marker_options
+    )
+    
+    # --- Set view to latitude ±1 degree ---
+    lat_min = latitude - 2
+    lat_max = latitude + 2
+    
+    # Convert these lat limits (with same longitude) to Web Mercator
+    _, y_min = TRANSFORM_4326_TO_3857.transform(longitude, lat_min)
+    _, y_max = TRANSFORM_4326_TO_3857.transform(longitude, lat_max)
+    
+    plot_map.y_range.start = y_min
+    plot_map.y_range.end = y_max
 
     return plot_map
+
 
 
 def plot_by_id(
