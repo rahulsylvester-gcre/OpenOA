@@ -288,6 +288,84 @@ def plot_windfarm(
     plot_map.scatter(x="x", y="y", source=source, size=marker_size, **marker_options)
 
     return plot_map
+    
+def plot_windturbine(
+    latitude,
+    longitude,
+    tile_name="OpenMap",
+    plot_width=800,
+    plot_height=800,
+    marker_size=14,
+    figure_kwargs={},
+    marker_kwargs={},
+):
+    """Plot a single wind turbine on a map (minimal version of plot_windfarm)."""
+    
+    MAP_TILES = {
+    "OpenMap": WMTSTileSource(
+        url="https://tile.openstreetmap.org/{Z}/{X}/{Y}.png"
+    ),
+    "ESRI": WMTSTileSource(
+        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{Z}/{Y}/{X}.jpg"
+    ),
+    "OpenTopoMap": WMTSTileSource(
+        url="https://tile.opentopomap.org/{Z}/{X}/{Y}.png"
+    ),
+}
+
+    # Make a minimal dataframe with a single turbine
+    asset_df = pd.DataFrame({
+        "asset_id": ["T1"],
+        "type": ["turbine"],
+        "latitude": [latitude],
+        "longitude": [longitude],
+    })
+
+    # Convert lat/lon -> Web Mercator
+    TRANSFORM_4326_TO_3857 = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=False)
+    asset_df["x"], asset_df["y"] = TRANSFORM_4326_TO_3857.transform(
+        asset_df["latitude"], asset_df["longitude"]
+    )
+    asset_df["coordinates"] = list(zip(asset_df["latitude"], asset_df["longitude"]))
+
+    # Default figure options
+    figure_options = {
+        "tools": "save,hover,pan,wheel_zoom,reset,help",
+        "x_axis_label": "Longitude",
+        "y_axis_label": "Latitude",
+        "match_aspect": True,
+        "tooltips": [("asset_id", "@asset_id"), ("type", "@type"), ("(Lat,Lon)", "@coordinates")],
+    }
+    figure_options.update(figure_kwargs)
+
+    # Default marker options
+    marker_options = {
+        "marker": "circle_y",
+        "line_width": 1,
+        "alpha": 0.8,
+        "fill_color": "blue",
+        "line_color": "white",
+    }
+    marker_options.update(marker_kwargs)
+
+    # Bokeh source
+    source = ColumnDataSource(asset_df)
+
+    # Create figure with tiles
+    plot_map = figure(
+        width=plot_width,
+        height=plot_height,
+        x_axis_type="mercator",
+        y_axis_type="mercator",
+        **figure_options,
+    )
+
+    plot_map.add_tile(MAP_TILES[tile_name])
+
+    # Plot turbine marker
+    plot_map.scatter(x="x", y="y", source=source, size=marker_size, **marker_options)
+
+    return plot_map
 
 
 def plot_by_id(
