@@ -87,27 +87,32 @@ class SimpleTimeseriesTests(unittest.TestCase):
         # df with a gap
         day_of_data = self.day_of_data.copy()
         missing_two = day_of_data.drop([2, 3])
-        missing_two_df = pd.DataFrame({"time": missing_two, "col1": missing_two})
+        missing_two_df = pd.DataFrame({"time": missing_two, "col1": np.ones(missing_two.size)})
         filled = timeseries.gap_fill_data_frame(missing_two_df, "time", "10min")
-        self.assertEqual(
-            day_of_data.size,
-            filled["time"].size,
-            "T1: Gap filling should increase size of this dataframe",
-        )
+        with self.subTest("Check for gaps"):
+            self.assertEqual(
+                day_of_data.size,
+                filled["time"].size,
+                "T1: Gap filling should increase size of this dataframe",
+            )
 
         # df with no gaps
         day_of_data = self.day_of_data.copy()
         day_of_data_df = pd.DataFrame({"time": day_of_data, "col1": day_of_data})
         filled = timeseries.gap_fill_data_frame(day_of_data_df, "time", "10min")
-        self.assertEqual(
-            filled["time"].size, day_of_data.size, "T2: Full series should not have any new members"
-        )
+        with self.subTest("Check no gaps"):
+            self.assertEqual(
+                filled["time"].size,
+                day_of_data.size,
+                "T2: Full series should not have any new members",
+            )
 
         # empty input df
         empty = pd.Series(dtype=np.float64)
         empty_df = pd.DataFrame({"time": empty, "col1": empty})
         filled = timeseries.gap_fill_data_frame(empty_df, "time", "10min")
-        self.assertEqual(filled["time"].size, 0, "T3: Empty dataframe should still be empty")
+        with self.subTest("Check for empty not inserted"):
+            self.assertEqual(filled["time"].size, 0, "T3: Empty dataframe should still be empty")
 
     def test_num_days(self):
         # Test 1 day of data
@@ -145,8 +150,8 @@ class SimpleTimeseriesTests(unittest.TestCase):
         test_dict = {}
 
         # All should be float Series given PlantData requirements
-        test_dict["a"] = pd.Series([True, 1, 2, 1e5, np.Inf]).astype(float)
-        test_dict["b"] = pd.Series([False, np.nan, 2, 1e5, np.Inf]).astype(float)
+        test_dict["a"] = pd.Series([True, 1, 2, 1e5, np.inf]).astype(float)
+        test_dict["b"] = pd.Series([False, np.nan, 2, 1e5, np.inf]).astype(float)
         test_dict["c"] = pd.Series([np.nan, 1, 2, 1e5, np.nan]).astype(float)
 
         nan_values = {"a": 0.0, "b": 0.2, "c": 0.4}
