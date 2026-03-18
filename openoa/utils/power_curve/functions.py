@@ -50,6 +50,8 @@ def IEC(
         :obj:`Callable`: Python function of type (Array[float] -> Array[float]) implementing the power curve.
 
     """
+    
+    min_points=5
 
     # Set up evenly spaced bins of fixed width, with any value over the maximum getting np.inf
     n_bins = int(np.ceil((windspeed_end - windspeed_start) / bin_width)) + 1
@@ -61,7 +63,18 @@ def IEC(
     # Compute the mean of each bin and set corresponding P_bin
     for ibin in range(0, len(bins) - 1):
         indices = (windspeed_col >= bins[ibin]) & (windspeed_col < bins[ibin + 1])
-        P_bin[ibin] = power_col.loc[indices].mean()
+        # Mean power values (OpenOA default method)
+        # P_bin[ibin] = power_col.loc[indices].mean()
+        
+        # Center power values (GCRE method)
+        x_bin = windspeed_col.loc[indices]
+        y_bin = power_col.loc[indices]
+        if len(x_bin) >= min_points:
+            a, b = np.polyfit(x_bin, y_bin, 1)
+            center = (bins[ibin] + bins[ibin + 1]) / 2
+            P_bin[ibin] = a * center + b
+        else:
+            P_bin[ibin] = np.nan
 
     # Linearly interpolate any missing bins
     P_bin = pd.Series(data=P_bin).interpolate(method="linear").bfill().values
