@@ -102,7 +102,7 @@ all = ["openoa[develop,docs,examples]"]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["openoa", "test", "examples"]
+include = ["openoa", "openoa.*", "test", "examples"]
 
 [tool.setuptools.dynamic]
 version = {attr = "openoa.__version__"}
